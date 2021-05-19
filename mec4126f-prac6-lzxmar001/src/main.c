@@ -23,11 +23,16 @@
 
 void main(void);                                                   //COMPULSORY
 void init_ADC(void);
+void init_external_interrupts(void);
 void init_LEDs(void);
+void init_buttons(void);
+
 
 #ifdef TRUESTUDIO												   //COMPULSORY
 	void reset_clock_to_48Mhz(void);							   //COMPULSORY
 #endif															   //COMPULSORY
+
+
 
 // MAIN FUNCTION -------------------------------------------------------------|
 
@@ -39,13 +44,18 @@ void main(void)
 
 	init_LCD();
 	init_ADC();
+
+	if (EXTI->PR &= EXTI_PR_PR3)				//if PA3 is pressed
+	{
+		ADC1->CR |= ADC_CR_ADSTART;				//START CONVERSION
+	}
+
+	init_buttons();
 	init_LEDs();
+	init_external_interrupts();
 
 	while(1)
 	{
-		delay(500000);
-		display_on_LCD();
-		display_on_LEDs();
 	}
 }
 
@@ -83,8 +93,7 @@ void init_ADC(void)
 	ADC1->CFGR1 |= ADC_CFGR1_RES_1;					//SETS RESOLUTION TO 8bit
 	while((ADC1->ISR & ADC_ISR_ADRDY) == 0);
 
-	ADC1->CFGR1 |= ADC_CFGR1_CONT;					//SETS ADC TO CONTINUOUS MODE
-	ADC1->CR |= ADC_CR_ADSTART;						//START CONVERSION
+	ADC1->CFGR1 &= ~ADC_CFGR1_CONT;					//SETS ADC TO SINGLE CONVERSION MODE
 	while ((ADC1->ISR & ADC_ISR_EOC)==0);
 }
 
@@ -115,10 +124,34 @@ void display_on_LEDs(void)
 	GPIOB->ODR = ADC1->DR;
 }
 
+void init_buttons(void)
+{
+	RCC->AHBENR |= RCC_AHBENR_GPIOAEN;				//enable clock for BUTTONS
+	GPIOA->PUPDR |= GPIO_PUPDR_PUPDR3_0;			//set PA3 to pull-up resistor input
+}
+
+void init_external_interrupts(void)
+{
+	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGCOMPEN;		//ENABLE CLOCK FOR SYSCONFIG.
+	SYSCFG->EXTICR[0] |= SYSCFG_EXTICR1_EXTI3_PA;	//ROUTE PORT A TO EXTI3
+	EXTI->IMR |= EXTI_IMR_MR3;						//Unmask the interrupt on Port A pin 3.
+	EXTI->FTSR |= EXTI_FTSR_TR3;					//@FALLING EDGE
+	NVIC_EnableIRQ(EXTI2_3_IRQn);					//enable exti2_3 interrupt on nvic
+}
 
 
 // INTERRUPT HANDLERS --------------------------------------------------------|
 
-
-
+void EXTI2_3_IRQHandler(void)
+{
+	if (EXTI->PR &= EXTI_PR_PR3)				//if PA3 is pressed
+	{
+		display_on_LEDs();						//show result on LEDs
+		display_on_LCD();						//show result on LCD
+	}
+	else
+	{
+	}
+	EXTI->PR |= EXTI_PR_PR3;
+}
 
